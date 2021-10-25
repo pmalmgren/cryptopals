@@ -10,6 +10,36 @@ lazy_static! {
     };
 }
 
+pub fn hamming(lhs: &str, rhs: &str) -> Result<usize, String> {
+    if lhs.len() != rhs.len() {
+        return Err("Lengths of string must match".to_string());
+    }
+    let mut acc: usize = 0;
+
+    for (ch1, ch2) in lhs.chars().zip(rhs.chars()) {
+        let xor = (ch1 as u8) ^ (ch2 as u8);
+        for idx in 0..7u8 {
+            let n = 1 << idx;
+            if xor & n != 0 {
+                acc += 1;
+            }
+        }
+    }
+    
+    Ok(acc)
+}
+
+#[cfg(test)]
+mod test {
+    use super::hamming;
+
+    #[test]
+    fn test_hamming() {
+        let distance = hamming("this is a test", "wokka wokka!!!").expect("should compute");
+        assert_eq!(distance, 37);
+    }
+}
+
 /// Encapsulates a HashMap which maps ASCII characters to their frequencies
 pub struct CharacterDistribution {
     /// ASCII index to frequency
@@ -29,7 +59,6 @@ impl CharacterDistribution {
         for line in contents.split('\n') {
             let split_line: Vec<&str> = line.split(':').collect();
             if split_line.len() != 2 {
-                eprintln!("Error splitting line: {}", line);
                 continue;
             }
             let index: usize = split_line[0].parse().expect("it should be a usize");
@@ -40,6 +69,7 @@ impl CharacterDistribution {
         Ok(dist)
     }
 
+    #[allow(dead_code)]
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let mut dist = Self::new();
 
@@ -51,6 +81,7 @@ impl CharacterDistribution {
         dist
     }
 
+    #[allow(dead_code)]
     pub fn letters_in_common(&self, other: &Self) -> usize {
         let mut common = 0;
 

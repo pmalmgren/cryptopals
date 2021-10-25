@@ -137,35 +137,6 @@ impl Ord for AccItem {
     }
 }
 
-/*
- *
- * 27: {('u', 'n'), ('r', 'i'), ('t', 'o'), ('p', 'k'), ('w', 'l'), ('q', 'j'), ('x', 'c'), ('z', 'a'), ('y', 'b'), ('s', 'h'), ('v', 'm')}
- * 12: {('m', 'a'), ('k', 'g'), ('x', 't'), ('j', 'f'), ('i', 'e'), ('n', 'b'), ('o', 'c'), ('h', 'd'), ('z', 'v'), ('y', 'u')}
- * 20: {('s', 'g'), ('v', 'b'), ('x', 'l'), ('y', 'm'), ('r', 'f'), ('p', 'd'), ('u', 'a'), ('w', 'c'), ('q', 'e'), ('z', 'n')}
- * 26: {('v', 'l'), ('q', 'k'), ('y', 'c'), ('r', 'h'), ('s', 'i'), ('u', 'o'), ('t', 'n'), ('p', 'j'), ('w', 'm'), ('x', 'b')} 
- * 7: {('f', 'a'), ('u', 'r'), ('d', 'c'), ('m', 'j'), ('v', 'q'), ('t', 's'), ('o', 'h'), ('e', 'b'), ('l', 'k'), ('n', 'i'), ('w', 'p')}
- * 5: {('g', 'b'), ('m', 'h'), ('u', 'p'), ('d', 'a'), ('l', 'i'), ('n', 'k'), ('t', 'q'), ('v', 's'), ('f', 'c'), ('w', 'r'), ('o', 'j')}
- * 1: {('q', 'p'), ('w', 'v'), ('m', 'l'), ('i', 'h'), ('g', 'f'), ('o', 'n'), ('u', 't'), ('y', 'x'), ('e', 'd'), ('c', 'b'), ('k', 'j'), ('s', 'r')}
- * 8: {('n', 'f'), ('x', 'p'), ('i', 'a'), ('l', 'd'), ('y', 'q'), ('j', 'b'), ('k', 'c'), ('m', 'e'), ('o', 'g'), ('z', 'r')}
- * 23: {('u', 'b'), ('r', 'e'), ('x', 'o'), ('q', 'f'), ('s', 'd'), ('v', 'a'), ('p', 'g'), ('z', 'm'), ('y', 'n'), ('t', 'c')}
- * 11: {('l', 'g'), ('j', 'a'), ('m', 'f'), ('o', 'd'), ('z', 'q'), ('i', 'b'), ('y', 'r'), ('h', 'c'), ('x', 's'), ('n', 'e')}}
- * 
- * 12 7 20
- * Iter 0
- * 
- * heap: {("m", "a"), ("k", "g"), ('x', 't'), ('j', 'f'), ('i', 'e'), ('n', 'b'), ('o', 'c'), ('h', 'd'), ('z', 'v'), ('y', 'u')}
- *
- *   ("o", "c")
- * x ('f', 'a')
- * = ("of", "ca"), ("oa", "cf")
- * = [some score], [0]
- *   ("o", "c")
- * x ('u', 'r')
- * = ("ou", "cr"), ("or", "cu")
- *   [some score], [some score]
- * "
- */
-
 fn check_next(lhs: &str, rhs: &str, alphabet_xor: &HashMap<u8, HashSet<(String, String)>>, xored: &u8, trie: &Trie<&str, u32>, acc: &mut BinaryHeap<AccItem>) {
     let possibilities = alphabet_xor.get(&xored).unwrap();
     for (ch, ch1) in possibilities {
@@ -235,23 +206,46 @@ fn challenge2(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 fn challenge4() -> Result<(), Box<dyn std::error::Error>> {
     let challenge_file_contents = std::fs::read_to_string(Path::new("4.txt"))?;
 
-    let mut biggest = (0.0, 0);
+    let mut smallest: Vec<(String, f64)> = vec![];
     let lines: Vec<String> = challenge_file_contents.split('\n').map(String::from).collect();
 
-    for (index, line) in lines.iter().enumerate() {
+    for (_index, line) in lines.iter().enumerate() {
         let decoded = hex::hex_str_to_bytes(&line)?;
-        let decoded_str = std::str::from_utf8(&decoded).expect(format!("couldn't decode utf8 for {} - {:?}", line, decoded).as_str());
-        let distribution = distance::CharacterDistribution::from_text(decoded_str); 
-        
-        let distance = distance::ENGLISH_ALPHABET.compare(&distribution);
-        if distance > biggest.0 {
-            biggest = (distance, index);
+        for ch in 0u8..255 {
+            if let Ok(distance) = decode_single(&decoded, ch) {
+                smallest.push(distance);
+            }
         }
     }
+    smallest.sort_by(|lhs, rhs| lhs.1.partial_cmp(&rhs.1).unwrap());
 
-    println!("xor encoded line = {}", lines[biggest.1]);
-    
+    println!("{:?}", smallest[0]);
+
     Ok(())
+}
+
+fn repeating_xor(input: &str, key: &[u8]) -> Vec<u8> {
+    let mut output: Vec<u8> = Vec::with_capacity(input.len());
+    for chunk in input.as_bytes().chunks(key.len()) {
+        output.extend(fixed_xor(chunk, &key[..chunk.len()]).unwrap());
+    }
+
+    output
+}
+
+fn challenge5(args: &[String]) {
+    if args.len() != 2 {
+        eprintln!("Give me an input filename and a key. Got: {:?}", args);
+        return;
+    }
+    let input = std::fs::read_to_string(Path::new(&args[0])).unwrap();
+    let key = &args[1];
+    let output = repeating_xor(&input, key.as_bytes());
+    println!("{}", hex::bytes_to_hex_str(&output));
+}
+
+fn challenge6() {
+    let input = std::fs::read_to_string(Path::new("6.txt")).unwrap();
 }
 
 static ASCII_LOWER: [char; 52] = [
@@ -265,21 +259,25 @@ static ASCII_LOWER: [char; 52] = [
     'J', 'K', 'L', 'M', 'N',
     'O', 'P', 'Q', 'R', 'S',
     'T', 'U', 'V', 'W' ,'X',
-    'Y', 'Z',
+    'Y', 'Z'
 ];
+
+fn decode_single(bytes: &[u8], single: u8) -> Result<(String, f64), Box<dyn std::error::Error>> {
+    let english = &distance::ENGLISH_ALPHABET;
+    let decoded = single_xor(&bytes, single);
+    let decoded_str = std::str::from_utf8(&decoded)?;
+    let decoded_distribution = distance::CharacterDistribution::from_text(decoded_str);
+    Ok((decoded_str.to_string(), english.compare(&decoded_distribution)))
+}
 
 fn challenge3(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     if args.len() > 1 {
-        let english = &distance::ENGLISH_ALPHABET;
         let decoded = hex::hex_str_to_bytes(&args[1])?;
         let mut smallest = ('-', 1.0);
         for ch in ASCII_LOWER.iter() {
-            let decoded = single_xor(&decoded, *ch as u8);
-            let decoded_str = std::str::from_utf8(&decoded)?;
-            let decoded_distribution = distance::CharacterDistribution::from_text(decoded_str);
-            let distance = english.compare(&decoded_distribution);
-            if distance < smallest.1 {
-                smallest = (*ch, distance);
+            let distance = decode_single(&decoded, *ch as u8)?;
+            if distance.1 < smallest.1 {
+                smallest = (*ch, distance.1);
             }
         }
         println!("Smallest Euclidean distance letter {} = {}", smallest.0, smallest.1);
@@ -292,7 +290,6 @@ fn challenge3(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     let args: Vec<String> = args().collect();
 
     if args.len() <= 1 {
@@ -306,6 +303,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "challenge2" => challenge2(&args[1..]),
         "challenge3" => challenge3(&args[1..]),
         "challenge4" => challenge4(),
+        "challenge5" => Ok(challenge5(&args[2..])),
         cmd => {
             eprintln!("Unknown subcommand {}", cmd);
             return Err(CliError("Unknown command".to_string()).into());
