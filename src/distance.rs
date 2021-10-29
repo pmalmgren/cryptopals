@@ -1,10 +1,11 @@
-use std::path::{PathBuf, Path};
 use lazy_static::lazy_static;
+use std::path::{Path, PathBuf};
 
 lazy_static! {
     pub static ref ENGLISH_ALPHABET: CharacterDistribution = {
         let file_path = Path::new("ascii_freq.txt");
-        let alphabet = CharacterDistribution::from_file(file_path.to_path_buf()).expect("should unwrap the thing");
+        let alphabet = CharacterDistribution::from_file(file_path.to_path_buf())
+            .expect("should unwrap the thing");
 
         alphabet
     };
@@ -25,7 +26,7 @@ pub fn hamming(lhs: &[u8], rhs: &[u8]) -> Result<usize, String> {
             }
         }
     }
-    
+
     Ok(acc)
 }
 
@@ -35,7 +36,8 @@ mod test {
 
     #[test]
     fn test_hamming() {
-        let distance = hamming("this is a test".as_bytes(), "wokka wokka!!!".as_bytes()).expect("should compute");
+        let distance = hamming("this is a test".as_bytes(), "wokka wokka!!!".as_bytes())
+            .expect("should compute");
         assert_eq!(distance, 37);
     }
 }
@@ -44,12 +46,14 @@ mod test {
 #[derive(Debug)]
 pub struct CharacterDistribution {
     /// ASCII index to frequency
-    frequencies: [f64; 256] 
+    frequencies: [f64; 256],
 }
 
 impl CharacterDistribution {
     fn new() -> Self {
-        Self { frequencies: [0.0; 256] }
+        Self {
+            frequencies: [0.0; 256],
+        }
     }
 
     /// assumes the file is line delimited with [ascii index]:freq
@@ -100,7 +104,7 @@ impl CharacterDistribution {
 
         for ch in text.chars() {
             if !ch.is_ascii() {
-                continue; 
+                continue;
             }
             let index = ch as usize;
             dist.frequencies[index] += 1.0;
@@ -120,7 +124,7 @@ impl CharacterDistribution {
             let diff = p - q;
             sum += f64::powi(diff, 2);
         }
-        
+
         f64::sqrt(sum)
     }
 }

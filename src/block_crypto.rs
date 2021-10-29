@@ -1,10 +1,10 @@
-use openssl::symm::{Cipher, Crypter, Mode, decrypt, encrypt};
 use super::CliError;
-use crate::xor::fixed_xor;
-use rand::Rng;
 use crate::base64;
-use std::error::Error;
+use crate::xor::fixed_xor;
+use openssl::symm::{decrypt, encrypt, Cipher, Crypter, Mode};
+use rand::Rng;
 use std::collections::HashMap;
+use std::error::Error;
 
 pub fn pad(input: &[u8], length: usize) -> Vec<u8> {
     if input.len() >= length {
@@ -29,21 +29,21 @@ fn remove_padding(input: &mut Vec<u8>, key_len: u8) {
                     padding_start = None;
                     detected_pad_byte = None;
                 }
-            },
+            }
             (None, None) => {
                 if *byte < key_len {
                     detected_pad_byte = Some(*byte);
                     padding_start = Some(idx);
                 }
-            },
-            _ => panic!("unreachable")
+            }
+            _ => panic!("unreachable"),
         }
     }
 
     match (padding_start, detected_pad_byte) {
         (Some(start), Some(pad_byte)) if (input.len() - start) as u8 == pad_byte => {
             input.truncate(start);
-        },
+        }
         _ => {}
     };
 }
@@ -85,7 +85,11 @@ pub fn decrypt_ecb(key: &[u8], input: &[u8]) -> Result<Vec<u8>, Box<dyn std::err
     Ok(decrypted)
 }
 
-pub fn decrypt_cbc(key: &[u8], input: &[u8], iv: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+pub fn decrypt_cbc(
+    key: &[u8],
+    input: &[u8],
+    iv: &[u8],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     if iv.len() != key.len() {
         return Err(CliError("Key and IV length mismatch".into()).into());
     }
@@ -106,11 +110,15 @@ pub fn decrypt_cbc(key: &[u8], input: &[u8], iv: &[u8]) -> Result<Vec<u8>, Box<d
         }
         previous_chunk = chunk;
     }
-    
+
     Ok(decrypted)
 }
 
-pub fn encrypt_cbc(key: &[u8], plaintext: &[u8], iv: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+pub fn encrypt_cbc(
+    key: &[u8],
+    plaintext: &[u8],
+    iv: &[u8],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     if iv.len() != key.len() {
         return Err(CliError("Key and IV length mismatch".into()).into());
     }
@@ -145,7 +153,7 @@ pub fn generate_random_bytes(length: usize, rng: &mut rand::rngs::ThreadRng) -> 
 
 pub enum EncryptedText {
     Cbc(Vec<u8>),
-    Ecb(Vec<u8>)
+    Ecb(Vec<u8>),
 }
 
 impl EncryptedText {
@@ -164,7 +172,7 @@ impl EncryptedText {
 pub struct UserProfile {
     email: String,
     uid: usize,
-    role: String
+    role: String,
 }
 
 impl UserProfile {
@@ -172,12 +180,14 @@ impl UserProfile {
         UserProfile {
             email: UserProfile::sanitize_email(email),
             uid: 10,
-            role: "user".to_string()
+            role: "user".to_string(),
         }
     }
 
     fn serialize(&self) -> Vec<u8> {
-        format!("email={}&uid={}&role={}", self.email, self.uid, self.role).as_bytes().to_vec()
+        format!("email={}&uid={}&role={}", self.email, self.uid, self.role)
+            .as_bytes()
+            .to_vec()
     }
 
     fn deserialize(input: &str) -> Result<Self, Box<dyn Error>> {
@@ -186,7 +196,8 @@ impl UserProfile {
             return Err(CliError("invalid data".into()).into());
         }
 
-        if !parts[0].contains("email=") || !parts[1].contains("uid=") || !parts[2].contains("role=") {
+        if !parts[0].contains("email=") || !parts[1].contains("uid=") || !parts[2].contains("role=")
+        {
             return Err(CliError("invalid data".into()).into());
         }
 
@@ -194,15 +205,14 @@ impl UserProfile {
         let uid = parts[1].replace("uid=", "").parse()?;
         let role = parts[2].replace("role=", "");
 
-        Ok(Self {
-            email,
-            uid,
-            role
-        })
+        Ok(Self { email, uid, role })
     }
 
     fn sanitize_email(email: &str) -> String {
-        email.chars().filter(|ch| *ch != '&' && *ch != '=').collect()
+        email
+            .chars()
+            .filter(|ch| *ch != '&' && *ch != '=')
+            .collect()
     }
 
     fn get_key() -> Result<Vec<u8>, Box<dyn Error>> {
@@ -222,7 +232,7 @@ impl UserProfile {
         Ok(output)
     }
 
-    pub (crate) fn decrypt(input: &[u8]) -> Result<Self, Box<dyn Error>> {
+    pub(crate) fn decrypt(input: &[u8]) -> Result<Self, Box<dyn Error>> {
         let decrypted = decrypt_ecb(&UserProfile::get_key()?, input)?;
         println!("input = {:?}", input);
         println!("decrypted = {:?}", decrypted);
@@ -246,12 +256,11 @@ impl Oracle {
                 k
             }
         };
-        let input: String = std::fs::read_to_string("12.txt")
-            .unwrap()
-            .replace('\n', "");
+        let input: String = std::fs::read_to_string("12.txt").unwrap().replace('\n', "");
         let to_crack = base64::base64_to_bytes(&input).expect("should decode");
         Ok(Self {
-            key, input: to_crack
+            key,
+            input: to_crack,
         })
     }
 
@@ -264,7 +273,11 @@ impl Oracle {
 
 /// Given a block size, some pad, and an oracle, create a lookup that will
 /// match encrypted byte slices against bytes
-fn create_lookup(pad_bytes: &[u8], block_size: usize, oracle: &Oracle) -> Result<HashMap<Vec<u8>, u8>, Box<dyn Error>> {
+fn create_lookup(
+    pad_bytes: &[u8],
+    block_size: usize,
+    oracle: &Oracle,
+) -> Result<HashMap<Vec<u8>, u8>, Box<dyn Error>> {
     let mut map: HashMap<Vec<u8>, u8> = HashMap::with_capacity(256);
     for byte in 0u8..255 {
         let mut padded_input = pad_bytes.to_vec();
@@ -276,7 +289,12 @@ fn create_lookup(pad_bytes: &[u8], block_size: usize, oracle: &Oracle) -> Result
     Ok(map)
 }
 
-pub fn decrypt_block(block_num: usize, block_size: usize, oracle: &Oracle, pad: &[u8]) -> Result<Vec<u8>, Vec<u8>> {
+pub fn decrypt_block(
+    block_num: usize,
+    block_size: usize,
+    oracle: &Oracle,
+    pad: &[u8],
+) -> Result<Vec<u8>, Vec<u8>> {
     // bytes = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     // block size = 3
     // append block size minus 1
@@ -302,17 +320,23 @@ pub fn decrypt_block(block_num: usize, block_size: usize, oracle: &Oracle, pad: 
     for i in 0..block_size {
         let pad_size = max_pad_size - i;
         // what we send to the oracle to push bytes over
-        let encryption_pad: Vec<u8> = (0..pad_size)
-            .map(|_| 'A' as u8)
-            .collect();
+        let encryption_pad: Vec<u8> = (0..pad_size).map(|_| 'A' as u8).collect();
 
         let lookup = create_lookup(&pad, block_size, &oracle).expect("should create the oracle");
-        let encrypted = oracle.encrypt(&encryption_pad).expect("should encrypt the text");
+        let encrypted = oracle
+            .encrypt(&encryption_pad)
+            .expect("should encrypt the text");
 
         let start = block_num * block_size;
-        let end = std::cmp::min(start + block_size, encrypted.len()-1);
+        let end = std::cmp::min(start + block_size, encrypted.len() - 1);
         if start >= encrypted.len() || end >= encrypted.len() {
-            println!("start={} >= len={} || end={} >= len={}", start, encrypted.len(), end, encrypted.len());
+            println!(
+                "start={} >= len={} || end={} >= len={}",
+                start,
+                encrypted.len(),
+                end,
+                encrypted.len()
+            );
             return Err(plaintext);
         }
         let first_block = encrypted[start..end].to_vec();
@@ -327,7 +351,7 @@ pub fn decrypt_block(block_num: usize, block_size: usize, oracle: &Oracle, pad: 
         }
     }
 
-    return Ok(plaintext)
+    return Ok(plaintext);
 }
 
 pub fn discover_blocksize(oracle: &Oracle) -> Result<usize, Box<dyn std::error::Error>> {
@@ -365,7 +389,8 @@ pub fn encryption_oracle(text: &[u8]) -> Result<EncryptedText, Box<dyn std::erro
     let key = generate_random_bytes(16, &mut rng);
     let prepend_text = generate_random_bytes(prepend_length, &mut rng);
     let append_text = generate_random_bytes(append_length, &mut rng);
-    let mut input: Vec<u8> = Vec::with_capacity(text.len() + prepend_text.len() + append_text.len());
+    let mut input: Vec<u8> =
+        Vec::with_capacity(text.len() + prepend_text.len() + append_text.len());
     input.extend_from_slice(&prepend_text);
     input.extend_from_slice(&text);
     input.extend_from_slice(&append_text);
@@ -389,7 +414,7 @@ mod test {
         let mut padded = pad("hey".as_bytes(), 10);
         assert_eq!(padded.len(), 10);
         assert_eq!(padded[3..], [7, 7, 7, 7, 7, 7, 7]);
-        remove_padding(&mut padded, 10); 
+        remove_padding(&mut padded, 10);
         assert_eq!(padded.len(), 3);
     }
 
@@ -398,10 +423,17 @@ mod test {
         let plaintext = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
         let key = "YELLOW SUBMARINE";
         let iv = "0123456789abcdef";
-        let encrypted = encrypt_cbc(key.as_bytes(), plaintext.as_bytes(), iv.as_bytes()).expect("to encrypt");
+        let encrypted =
+            encrypt_cbc(key.as_bytes(), plaintext.as_bytes(), iv.as_bytes()).expect("to encrypt");
         assert_eq!(encrypted.len(), plaintext.len());
         let decrypted = decrypt_cbc(key.as_bytes(), &encrypted, iv.as_bytes()).expect("to decrypt");
-        assert_eq!(decrypted, plaintext.as_bytes(), "Original {:?}\n Decrypted {:?}", plaintext.as_bytes(), decrypted);
+        assert_eq!(
+            decrypted,
+            plaintext.as_bytes(),
+            "Original {:?}\n Decrypted {:?}",
+            plaintext.as_bytes(),
+            decrypted
+        );
     }
 
     #[test]
@@ -409,17 +441,26 @@ mod test {
         let plaintext = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         let key = "YELLOW SUBMARINE";
         let iv = "0123456789abcdef";
-        let encrypted = encrypt_cbc(key.as_bytes(), plaintext.as_bytes(), iv.as_bytes()).expect("to encrypt");
+        let encrypted =
+            encrypt_cbc(key.as_bytes(), plaintext.as_bytes(), iv.as_bytes()).expect("to encrypt");
         assert_eq!(encrypted.len(), 32);
         let decrypted = decrypt_cbc(key.as_bytes(), &encrypted, iv.as_bytes()).expect("to decrypt");
-        assert_eq!(decrypted, plaintext.as_bytes(), "Original {:?}\n Decrypted {:?}", plaintext.as_bytes(), decrypted);
+        assert_eq!(
+            decrypted,
+            plaintext.as_bytes(),
+            "Original {:?}\n Decrypted {:?}",
+            plaintext.as_bytes(),
+            decrypted
+        );
     }
 
     #[test]
     fn test_ecb_encryption() {
         let plaintext = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        let encrypted = encrypt_ecb("YELLOW SUBMARINE".as_bytes(), plaintext.as_bytes()).expect("should encrypt");
-        let decrypted = decrypt_ecb("YELLOW SUBMARINE".as_bytes(), &encrypted).expect("should decrypt");
+        let encrypted = encrypt_ecb("YELLOW SUBMARINE".as_bytes(), plaintext.as_bytes())
+            .expect("should encrypt");
+        let decrypted =
+            decrypt_ecb("YELLOW SUBMARINE".as_bytes(), &encrypted).expect("should decrypt");
         assert_eq!(decrypted, plaintext.as_bytes());
     }
 

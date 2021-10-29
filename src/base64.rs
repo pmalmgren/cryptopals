@@ -71,7 +71,6 @@ lazy_static! {
         map.insert('/', 63);
         map.insert('=', 64);
         map
-
     };
     static ref BASE64_ALPHABET: HashMap<u32, char> = {
         let mut map = HashMap::new();
@@ -162,10 +161,7 @@ pub fn base64_to_bytes(base64_string: &str) -> Result<Vec<u8>, String> {
         let second = BASE64_CODEPOINTS[&(chunk[1] as char)];
         let third = BASE64_CODEPOINTS[&(chunk[2] as char)];
         let fourth = BASE64_CODEPOINTS[&(chunk[3] as char)];
-        let combined: u32 = (first << 18)  |
-                            (second << 12) |
-                            (third << 6)   |
-                            fourth;
+        let combined: u32 = (first << 18) | (second << 12) | (third << 6) | fourth;
         let decoded: [u8; 4] = combined.to_ne_bytes();
         output.push(decoded[2]);
         if (chunk[2] as char) != '=' {
@@ -260,5 +256,4 @@ mod test {
         let decoded_str = std::str::from_utf8(&decoded).expect("should serialize");
         assert_eq!(decoded_str, "h");
     }
-
 }

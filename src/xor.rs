@@ -13,10 +13,7 @@ pub fn fixed_xor(lhs: &[u8], rhs: &[u8]) -> Result<Vec<u8>, CliError> {
 }
 
 pub fn single_xor(lhs: &[u8], rhs: u8) -> Vec<u8> {
-    lhs
-        .into_iter()
-        .map(|b| b ^ rhs)
-        .collect()
+    lhs.into_iter().map(|b| b ^ rhs).collect()
 }
 
 pub fn repeating_xor(input: &[u8], key: &[u8]) -> Vec<u8> {

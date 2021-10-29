@@ -1,24 +1,25 @@
+use crate::error::CliError;
 use std::env::args;
 use std::error::Error;
 use std::path::Path;
-use std::collections::HashMap;
-use std::convert::TryInto;
-use crate::error::CliError;
 
 mod base64;
-mod hex;
+mod block_crypto;
 mod distance;
+mod error;
+mod hex;
 mod otp;
 mod xor;
-mod error;
-mod block_crypto;
 
 fn decode_single(bytes: &[u8], single: u8) -> Result<(String, f64), Box<dyn Error>> {
     let english = &distance::ENGLISH_ALPHABET;
     let decoded = xor::single_xor(&bytes, single);
     let decoded_str = std::str::from_utf8(&decoded)?;
     let decoded_distribution = distance::CharacterDistribution::from_text(decoded_str);
-    Ok((decoded_str.to_string(), english.compare(&decoded_distribution)))
+    Ok((
+        decoded_str.to_string(),
+        english.compare(&decoded_distribution),
+    ))
 }
 
 fn challenge1(args: &[String]) -> Result<(), Box<dyn Error>> {
@@ -51,7 +52,10 @@ fn challenge3(args: &[String]) -> Result<(), Box<dyn Error>> {
                 smallest = (*ch, distance.1);
             }
         }
-        println!("Smallest Euclidean distance letter {} = {}", smallest.0, smallest.1);
+        println!(
+            "Smallest Euclidean distance letter {} = {}",
+            smallest.0, smallest.1
+        );
         let decoded = xor::single_xor(&decoded, smallest.0 as u8);
         let decoded_str = std::str::from_utf8(&decoded)?;
         println!("Decoded = {}", decoded_str);
@@ -64,7 +68,10 @@ fn challenge4() -> Result<(), Box<dyn Error>> {
     let challenge_file_contents = std::fs::read_to_string(Path::new("4.txt"))?;
 
     let mut smallest: Vec<(String, f64)> = vec![];
-    let lines: Vec<String> = challenge_file_contents.split('\n').map(String::from).collect();
+    let lines: Vec<String> = challenge_file_contents
+        .split('\n')
+        .map(String::from)
+        .collect();
 
     for (_index, line) in lines.iter().enumerate() {
         let decoded = hex::hex_str_to_bytes(&line)?;
@@ -143,17 +150,19 @@ mod challenge6 {
                     smallest.push((ch, distance.1));
                 }
             }
-            smallest.sort_by(|lhs, rhs| lhs.1.partial_cmp(&rhs.1).expect(
-                format!("Why?? {} > {}", lhs.1, rhs.1).as_str()
-            ));
+            smallest.sort_by(|lhs, rhs| {
+                lhs.1
+                    .partial_cmp(&rhs.1)
+                    .expect(format!("Why?? {} > {}", lhs.1, rhs.1).as_str())
+            });
             key.push(smallest[0].0);
         }
-        
+
         let cracked = xor::repeating_xor(cipher, &key);
 
         match std::str::from_utf8(&cracked) {
             Err(_e) => None,
-            Ok(s) => Some((s.into(), key))
+            Ok(s) => Some((s.into(), key)),
         }
     }
 }
@@ -177,15 +186,22 @@ fn challenge6() {
         let fifth = chunks.next().expect("Should have chunk 5");
         let sixth = chunks.next().expect("Should have chunk 6");
 
-        let dist1 = distance::hamming(first, second).expect("should get the distance") as f64 / size as f64;
-        let dist2 = distance::hamming(third, fourth).expect("should get the distance") as f64 / size as f64;
-        let dist3 = distance::hamming(fifth, sixth).expect("should get the distance") as f64 / size as f64;
+        let dist1 =
+            distance::hamming(first, second).expect("should get the distance") as f64 / size as f64;
+        let dist2 =
+            distance::hamming(third, fourth).expect("should get the distance") as f64 / size as f64;
+        let dist3 =
+            distance::hamming(fifth, sixth).expect("should get the distance") as f64 / size as f64;
         let distance = (dist1 + dist2 + dist3) / 3.0;
-        
+
         min_size.push((size, distance));
     }
 
-    min_size.sort_by(|lhs, rhs| lhs.1.partial_cmp(&rhs.1).unwrap_or(std::cmp::Ordering::Equal));
+    min_size.sort_by(|lhs, rhs| {
+        lhs.1
+            .partial_cmp(&rhs.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let mut attempted_cracks: Vec<(String, Vec<u8>, f64)> = vec![];
     for size in min_size[0..5].into_iter() {
@@ -204,17 +220,9 @@ fn challenge6() {
 }
 
 static ASCII_LOWER: [char; 52] = [
-    'a', 'b', 'c', 'd', 'e', 
-    'f', 'g', 'h', 'i', 'j', 
-    'k', 'l', 'm', 'n', 'o',
-    'p', 'q', 'r', 's', 't', 
-    'u', 'v', 'w', 'x', 'y', 
-    'z', 'A', 'B', 'C', 'D',
-    'E', 'F', 'G', 'H', 'I',
-    'J', 'K', 'L', 'M', 'N',
-    'O', 'P', 'Q', 'R', 'S',
-    'T', 'U', 'V', 'W' ,'X',
-    'Y', 'Z'
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
+    't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
+    'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
 ];
 
 fn challenge7() {
@@ -236,7 +244,7 @@ fn challenge8() {
         .split('\n')
         .map(|s| hex::hex_str_to_bytes(s).expect("should unwrap"))
         .collect();
-    
+
     let mut scores: Vec<(usize, f64, usize)> = vec![];
     for (line, cipher) in ciphers.into_iter().enumerate() {
         if cipher.len() == 0 {
@@ -262,7 +270,10 @@ fn challenge8() {
     }
 
     scores.sort_by(|lhs, rhs| lhs.1.partial_cmp(&rhs.1).unwrap());
-    println!("Line {} has lowest average pairwise hamming distance: {:.4} and {} identical blocks", scores[0].0, scores[0].1, scores[0].2);
+    println!(
+        "Line {} has lowest average pairwise hamming distance: {:.4} and {} identical blocks",
+        scores[0].0, scores[0].1, scores[0].2
+    );
 }
 
 fn challenge9(args: &[String]) -> Result<(), Box<dyn Error>> {
@@ -300,7 +311,9 @@ fn challenge10() -> Result<(), Box<dyn Error>> {
 }
 
 fn yellow_submarine_10_times() -> Vec<u8> {
-    let plaintext_vec: Vec<Vec<char>> = (0..10).map(|_x| "YELLOW_SUBMARINE".to_string().chars().collect()).collect();
+    let plaintext_vec: Vec<Vec<char>> = (0..10)
+        .map(|_x| "YELLOW_SUBMARINE".to_string().chars().collect())
+        .collect();
     let plaintext: String = plaintext_vec.into_iter().flatten().collect();
     plaintext.into_bytes()
 }
