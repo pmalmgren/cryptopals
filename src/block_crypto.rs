@@ -466,7 +466,7 @@ mod test {
 
     #[test]
     fn test_user_profile() {
-        let profile = UserProfile::profile_for("peter@peter.com");
+        let profile = UserProfile::profile_for("peter@peter.com&&==");
         let encrypted = profile.encrypt().expect("should encrypt");
         let decrypted = UserProfile::decrypt(&encrypted).expect("should deserialize");
         assert_eq!(profile, decrypted);
