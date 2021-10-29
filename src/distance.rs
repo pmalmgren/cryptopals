@@ -10,14 +10,14 @@ lazy_static! {
     };
 }
 
-pub fn hamming(lhs: &str, rhs: &str) -> Result<usize, String> {
+pub fn hamming(lhs: &[u8], rhs: &[u8]) -> Result<usize, String> {
     if lhs.len() != rhs.len() {
         return Err("Lengths of string must match".to_string());
     }
     let mut acc: usize = 0;
 
-    for (ch1, ch2) in lhs.chars().zip(rhs.chars()) {
-        let xor = (ch1 as u8) ^ (ch2 as u8);
+    for (ch1, ch2) in lhs.iter().zip(rhs.iter()) {
+        let xor = ch1 ^ ch2;
         for idx in 0..7u8 {
             let n = 1 << idx;
             if xor & n != 0 {
@@ -35,12 +35,13 @@ mod test {
 
     #[test]
     fn test_hamming() {
-        let distance = hamming("this is a test", "wokka wokka!!!").expect("should compute");
+        let distance = hamming("this is a test".as_bytes(), "wokka wokka!!!".as_bytes()).expect("should compute");
         assert_eq!(distance, 37);
     }
 }
 
 /// Encapsulates a HashMap which maps ASCII characters to their frequencies
+#[derive(Debug)]
 pub struct CharacterDistribution {
     /// ASCII index to frequency
     frequencies: [f64; 256] 
@@ -119,7 +120,7 @@ impl CharacterDistribution {
             let diff = p - q;
             sum += f64::powi(diff, 2);
         }
-
+        
         f64::sqrt(sum)
     }
 }

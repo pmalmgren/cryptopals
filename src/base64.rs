@@ -151,7 +151,7 @@ fn unwrap_bits(input: u32) -> char {
     *val
 }
 
-pub fn base64_to_slice(base64_string: &str) -> Result<Vec<u8>, String> {
+pub fn base64_to_bytes(base64_string: &str) -> Result<Vec<u8>, String> {
     if base64_string.len() % 4 != 0 {
         return Err("Base 64 string is not divisible by 4".to_string());
     }
@@ -240,7 +240,7 @@ mod test {
     #[test]
     fn base64_decodes() {
         let encoded = "aGV5";
-        let decoded = base64_to_slice(&encoded).expect("should decode");
+        let decoded = base64_to_bytes(&encoded).expect("should decode");
         let decoded_str = std::str::from_utf8(&decoded).expect("should serialize");
         assert_eq!(decoded_str, "hey");
     }
@@ -248,7 +248,7 @@ mod test {
     #[test]
     fn base64_decodes_length_two() {
         let encoded = "aGU=";
-        let decoded = base64_to_slice(&encoded).expect("should decode");
+        let decoded = base64_to_bytes(&encoded).expect("should decode");
         let decoded_str = std::str::from_utf8(&decoded).expect("should serialize");
         assert_eq!(decoded_str, "he");
     }
@@ -256,7 +256,7 @@ mod test {
     #[test]
     fn base64_decodes_length_one() {
         let encoded = "aA==";
-        let decoded = base64_to_slice(&encoded).expect("should decode");
+        let decoded = base64_to_bytes(&encoded).expect("should decode");
         let decoded_str = std::str::from_utf8(&decoded).expect("should serialize");
         assert_eq!(decoded_str, "h");
     }

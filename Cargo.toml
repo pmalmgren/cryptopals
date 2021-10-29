@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 lazy_static = "1.4.0"
 radix_trie = "0.2.1"
+openssl = "0.10"
+rand = "0.8.4"
