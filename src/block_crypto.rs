@@ -1,7 +1,7 @@
 use super::CliError;
 use crate::base64;
 use crate::xor::fixed_xor;
-use openssl::symm::{decrypt, encrypt, Cipher, Crypter, Mode};
+use openssl::symm::{Cipher, Crypter, Mode};
 use rand::Rng;
 use std::collections::HashMap;
 use std::error::Error;
@@ -190,20 +190,27 @@ impl UserProfile {
             .to_vec()
     }
 
+    #[allow(dead_code)]
     fn deserialize(input: &str) -> Result<Self, Box<dyn Error>> {
         let parts: Vec<&str> = input.split('&').collect();
+
         if parts.len() != 3 {
             return Err(CliError("invalid data".into()).into());
         }
 
-        if !parts[0].contains("email=") || !parts[1].contains("uid=") || !parts[2].contains("role=")
-        {
-            return Err(CliError("invalid data".into()).into());
-        }
+        let mut email = String::from("");
+        let mut uid = 0;
+        let mut role = String::from("");
 
-        let email = parts[0].replace("email=", "");
-        let uid = parts[1].replace("uid=", "").parse()?;
-        let role = parts[2].replace("role=", "");
+        for part in parts {
+            if part.contains("email=") {
+                email = part.replace("email=", "");
+            } else if part.contains("uid=") {
+                uid = part.replace("uid=", "").parse()?;
+            } else if part.contains("role=") {
+                role = part.replace("role=", "");
+            }
+        }
 
         Ok(Self { email, uid, role })
     }
@@ -218,7 +225,7 @@ impl UserProfile {
     fn get_key() -> Result<Vec<u8>, Box<dyn Error>> {
         match std::fs::read("profile_key.txt") {
             Ok(k) => Ok(k),
-            Err(e) => {
+            Err(_e) => {
                 let mut rng = rand::thread_rng();
                 let k = generate_random_bytes(16, &mut rng);
                 std::fs::write("profile_key.txt", &k)?;
@@ -232,10 +239,9 @@ impl UserProfile {
         Ok(output)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn decrypt(input: &[u8]) -> Result<Self, Box<dyn Error>> {
         let decrypted = decrypt_ecb(&UserProfile::get_key()?, input)?;
-        println!("input = {:?}", input);
-        println!("decrypted = {:?}", decrypted);
         UserProfile::deserialize(std::str::from_utf8(&decrypted)?)
     }
 }
@@ -243,22 +249,25 @@ impl UserProfile {
 pub struct Oracle {
     key: Vec<u8>,
     input: Vec<u8>,
+    prefix: Vec<u8>
 }
 
 impl Oracle {
     pub fn new() -> Result<Self, Box<dyn Error>> {
+        let mut rng = rand::thread_rng();
         let key = match std::fs::read("key.txt") {
             Ok(k) => k,
             Err(_) => {
-                let mut rng = rand::thread_rng();
                 let k = generate_random_bytes(16, &mut rng);
                 std::fs::write("key.txt", &k)?;
                 k
             }
         };
+        let prefix: Vec<u8> = generate_random_bytes(rng.gen_range(1..64), &mut rng);
         let input: String = std::fs::read_to_string("12.txt").unwrap().replace('\n', "");
         let to_crack = base64::base64_to_bytes(&input).expect("should decode");
         Ok(Self {
+            prefix,
             key,
             input: to_crack,
         })
@@ -269,32 +278,49 @@ impl Oracle {
         bytes.extend_from_slice(&self.input);
         encrypt_ecb(&self.key, &bytes)
     }
+
+    pub fn encrypt_prefix(&self, bytes: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut prefix = self.prefix.clone();
+        prefix.extend_from_slice(&bytes); 
+        prefix.extend_from_slice(&self.input);
+        encrypt_ecb(&self.key, &prefix)
+    }
 }
 
 /// Given a block size, some pad, and an oracle, create a lookup that will
 /// match encrypted byte slices against bytes
-fn create_lookup(
+fn create_lookup<F>(
     pad_bytes: &[u8],
     block_size: usize,
-    oracle: &Oracle,
-) -> Result<HashMap<Vec<u8>, u8>, Box<dyn Error>> {
+    block_num: usize,
+    oracle: &F,
+) -> Result<HashMap<Vec<u8>, u8>, Box<dyn Error>>
+where
+    F: Fn(&[u8]) -> Result<Vec<u8>, Box<dyn Error>>,
+{
     let mut map: HashMap<Vec<u8>, u8> = HashMap::with_capacity(256);
     for byte in 0u8..255 {
         let mut padded_input = pad_bytes.to_vec();
         padded_input.push(byte);
-        let encrypted = oracle.encrypt(&padded_input)?;
-        let first_block = encrypted[0..block_size].to_vec();
+        let encrypted = oracle(&padded_input)?;
+        let start = block_num * block_size;
+        let end = std::cmp::min(start + block_size, encrypted.len() - 1);
+        let first_block = encrypted[start..end].to_vec();
         map.insert(first_block, byte);
     }
     Ok(map)
 }
 
-pub fn decrypt_block(
+pub fn decrypt_block<F>(
     block_num: usize,
     block_size: usize,
-    oracle: &Oracle,
+    offset: usize,
     pad: &[u8],
-) -> Result<Vec<u8>, Vec<u8>> {
+    encrypt_fn: F,
+) -> Result<Vec<u8>, Vec<u8>>
+where
+    F: Fn(&[u8]) -> Result<Vec<u8>, Box<dyn Error>>,
+{
     // bytes = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     // block size = 3
     // append block size minus 1
@@ -322,10 +348,9 @@ pub fn decrypt_block(
         // what we send to the oracle to push bytes over
         let encryption_pad: Vec<u8> = (0..pad_size).map(|_| 'A' as u8).collect();
 
-        let lookup = create_lookup(&pad, block_size, &oracle).expect("should create the oracle");
-        let encrypted = oracle
-            .encrypt(&encryption_pad)
-            .expect("should encrypt the text");
+        let lookup =
+            create_lookup(&pad, block_size, offset, &encrypt_fn).expect("should create the lookup");
+        let encrypted = encrypt_fn(&encryption_pad).expect("should encrypt the text");
 
         let start = block_num * block_size;
         let end = std::cmp::min(start + block_size, encrypted.len() - 1);
@@ -340,6 +365,7 @@ pub fn decrypt_block(
             return Err(plaintext);
         }
         let first_block = encrypted[start..end].to_vec();
+        println!("first_block = {:?}", first_block);
         let first_char = lookup.get(&first_block);
         if let Some(ch) = first_char {
             plaintext.push(*ch);
@@ -354,11 +380,14 @@ pub fn decrypt_block(
     return Ok(plaintext);
 }
 
-pub fn discover_blocksize(oracle: &Oracle) -> Result<usize, Box<dyn std::error::Error>> {
-    let encrypted_len = oracle.encrypt("".as_bytes())?.len();
+pub fn discover_blocksize<F>(oracle: &F) -> Result<usize, Box<dyn std::error::Error>>
+where
+    F: Fn(&[u8]) -> Result<Vec<u8>, Box<dyn Error>>,
+{
+    let encrypted_len = oracle("".as_bytes())?.len();
     for idx in 1..32 {
         let guess: Vec<u8> = (0..idx).map(|_i| 'a' as u8).collect();
-        let encrypted = oracle.encrypt(&guess)?;
+        let encrypted = oracle(&guess)?;
         let diff = encrypted.len() - encrypted_len;
         if diff > 0 {
             return Ok(diff);
