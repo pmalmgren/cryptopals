@@ -19,15 +19,14 @@ pub fn pad(input: &[u8], length: usize) -> Vec<u8> {
     output
 }
 
-fn remove_padding(input: &mut Vec<u8>, key_len: u8) {
+pub fn remove_padding(input: &mut Vec<u8>, key_len: u8) -> Result<(), CliError> {
     let mut padding_start: Option<usize> = None;
     let mut detected_pad_byte: Option<u8> = None;
     for (idx, byte) in input.into_iter().enumerate() {
         match (padding_start, detected_pad_byte) {
             (Some(_start), Some(pad_byte)) => {
                 if *byte != pad_byte {
-                    padding_start = None;
-                    detected_pad_byte = None;
+                    return Err(CliError(format!("Invalid padding: {:?}", input)).into());
                 }
             }
             (None, None) => {
@@ -43,9 +42,13 @@ fn remove_padding(input: &mut Vec<u8>, key_len: u8) {
     match (padding_start, detected_pad_byte) {
         (Some(start), Some(pad_byte)) if (input.len() - start) as u8 == pad_byte => {
             input.truncate(start);
+            Ok(())
         }
-        _ => {}
-    };
+        (Some(start), Some(pad_byte)) if (input.len() - start) as u8 != pad_byte => {
+            Err(CliError(format!("Invalid padding: {:?}", input)).into())
+        }
+        _ => Ok(())
+    }
 }
 
 pub fn encrypt_ecb(key: &[u8], input: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
@@ -76,7 +79,7 @@ pub fn decrypt_ecb(key: &[u8], input: &[u8]) -> Result<Vec<u8>, Box<dyn std::err
         decrypter.update(&chunk, &mut output)?;
         let mut output = output[0..key.len()].to_vec();
         if chunk_num == num_chunks - 1 {
-            remove_padding(&mut output, key.len() as u8);
+            remove_padding(&mut output, key.len() as u8)?;
             decrypted.extend_from_slice(&output);
         } else {
             decrypted.extend_from_slice(&output);
@@ -103,7 +106,7 @@ pub fn decrypt_cbc(
         decrypter.update(&chunk, &mut output)?;
         let mut xored_output = fixed_xor(&output[0..key.len()], &previous_chunk)?;
         if chunk_num == num_chunks - 1 {
-            remove_padding(&mut xored_output, key.len() as u8);
+            remove_padding(&mut xored_output, key.len() as u8)?;
             decrypted.extend_from_slice(&xored_output);
         } else {
             decrypted.extend_from_slice(&xored_output);
@@ -442,8 +445,22 @@ mod test {
         let mut padded = pad("hey".as_bytes(), 10);
         assert_eq!(padded.len(), 10);
         assert_eq!(padded[3..], [7, 7, 7, 7, 7, 7, 7]);
-        remove_padding(&mut padded, 10);
+        remove_padding(&mut padded, 10).expect("should work");
         assert_eq!(padded.len(), 3);
+    }
+
+    #[test]
+    fn test_remove_invalid_padding_mismatched() {
+        let mut padded = vec![65, 65, 65, 65, 4, 4, 4, 10];
+        let res = remove_padding(&mut padded, 8);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_remove_invalid_padding_wrong_length() {
+        let mut padded = vec![65, 65, 65, 65, 5, 5, 5, 5];
+        let res = remove_padding(&mut padded, 8);
+        assert!(res.is_err());
     }
 
     #[test]
