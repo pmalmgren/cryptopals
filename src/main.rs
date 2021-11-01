@@ -538,7 +538,7 @@ fn challenge14() -> Result<(), Box<dyn Error>> {
     let random_pad = challenge14::detect_random_pad(block_size, &|bytes: &[u8]| oracle.encrypt_prefix(bytes))?;
     println!("Discovered random bytes = {:?}", random_pad);
 
-    let mut _plaintext: String = "".to_string();
+    let mut plaintext: String = "".to_string();
     let pad: Vec<u8> = (0..block_size - 1).map(|_| 'A' as u8).collect();
     // the input looks like this:
     // [RB, RB1, RB2, RB3, RB4, P1, P2, P3] [B1, B2, B3, B4, B5, B6, B7, B8]
@@ -547,11 +547,31 @@ fn challenge14() -> Result<(), Box<dyn Error>> {
     // [RB, RB1, RB2, RB3, RB4, P1, P2, P3] [A, A, A, A, A, A, A, B1] [B2, B3, B4, B5, B6, B7, B8, B9]
     // attack 2:
     // [RB, RB1, RB2, RB3, RB4, P1, P2, P3] [A, A, A, A, A, A, A, B1] [B2, B3, B4, B5, B6, B7, B8, B9]
-    let decrypted = block_crypto::decrypt_block(random_pad.controlled_block, block_size, random_pad.controlled_block, &pad, &|bytes: &[u8]| {
-        let mut to_encrypt = random_pad.pad_bytes.clone();
-        to_encrypt.extend_from_slice(bytes);
-        oracle.encrypt_prefix(&to_encrypt)
-    });
+    let encrypted = oracle.encrypt_prefix(&random_pad.pad_bytes)?;
+    let mut pad: Vec<u8> = (0..block_size - 1).map(|_| 'A' as u8).collect();
+    let start = random_pad.controlled_block;
+    let end = encrypted.len() / block_size;
+
+    for idx in start..end {
+        let result = block_crypto::decrypt_block(idx, block_size, random_pad.controlled_block, &pad, &|bytes: &[u8]| {
+            let mut to_encrypt = random_pad.pad_bytes.clone();
+            to_encrypt.extend_from_slice(bytes);
+            oracle.encrypt_prefix(&to_encrypt)
+        });
+        match result {
+            Ok(bytes) => {
+                pad = bytes[1..].to_vec();
+                let decryted_str = std::str::from_utf8(&bytes)?;
+                plaintext.push_str(decryted_str);
+            }
+            Err(bytes) => {
+                let decryted_str = std::str::from_utf8(&bytes)?;
+                plaintext.push_str(decryted_str);
+                break;
+            }
+        };
+    }
+    println!("Decrypted = {}", plaintext);
 
     Ok(())
 }

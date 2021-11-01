@@ -365,7 +365,6 @@ where
             return Err(plaintext);
         }
         let first_block = encrypted[start..end].to_vec();
-        println!("first_block = {:?}", first_block);
         let first_char = lookup.get(&first_block);
         if let Some(ch) = first_char {
             plaintext.push(*ch);
